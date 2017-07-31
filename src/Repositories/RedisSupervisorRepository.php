@@ -2,6 +2,7 @@
 
 namespace Laravel\Horizon\Repositories;
 
+use Cake\Chronos\Chronos;
 use Illuminate\Support\Arr;
 use Laravel\Horizon\Supervisor;
 use Laravel\Horizon\Contracts\SupervisorRepository;
@@ -34,9 +35,9 @@ class RedisSupervisorRepository implements SupervisorRepository
      */
     public function names()
     {
-        return collect($this->connection()->keys('supervisor:*'))->map(function ($name) {
-            return substr($name, 11);
-        })->all();
+        return $this->connection()->zrevrangebyscore('supervisors', '+inf',
+            Chronos::now()->subSeconds(29)->getTimestamp()
+        );
     }
 
     /**
@@ -103,7 +104,7 @@ class RedisSupervisorRepository implements SupervisorRepository
     /**
      * Update the information about the given supervisor process.
      *
-     * @param \Laravel\Horizon\Supervisor $supervisor
+     * @param  \Laravel\Horizon\Supervisor  $supervisor
      * @return void
      */
     public function update(Supervisor $supervisor)
@@ -112,20 +113,24 @@ class RedisSupervisorRepository implements SupervisorRepository
             return [$supervisor->options->connection.':'.$pool->queue() => count($pool->processes())];
         })->toJson();
 
-        $this->connection()->hmset(
-            'supervisor:'.$supervisor->name, [
-                'name' => $supervisor->name,
-                'master' => explode(':', $supervisor->name)[0],
-                'pid' => $supervisor->pid(),
-                'status' => $supervisor->working ? 'running' : 'paused',
-                'processes' => $processes,
-                'options' => $supervisor->options->toJson(),
-            ]
-        );
+        $this->connection()->pipeline(function ($pipe) use ($supervisor, $processes) {
+            $pipe->hmset(
+                'supervisor:'.$supervisor->name, [
+                    'name' => $supervisor->name,
+                    'master' => explode(':', $supervisor->name)[0],
+                    'pid' => $supervisor->pid(),
+                    'status' => $supervisor->working ? 'running' : 'paused',
+                    'processes' => $processes,
+                    'options' => $supervisor->options->toJson(),
+                ]
+            );
 
-        $this->connection()->expire(
-            'supervisor:'.$supervisor->name, 30
-        );
+            $pipe->zadd('supervisors',
+                Chronos::now()->getTimestamp(), $supervisor->name
+            );
+
+            $pipe->expire('supervisor:'.$supervisor->name, 30);
+        });
     }
 
     /**
@@ -145,6 +150,20 @@ class RedisSupervisorRepository implements SupervisorRepository
         $this->connection()->del(...collect($names)->map(function ($name) {
             return 'supervisor:'.$name;
         })->all());
+
+        $this->connection()->zrem('supervisors', ...$names);
+    }
+
+    /**
+     * Remove expired supervisors from storage.
+     *
+     * @return void
+     */
+    public function flushExpired()
+    {
+        $this->connection()->zremrangebyscore('supervisors', '-inf',
+            Chronos::now()->subSeconds(14)->getTimestamp()
+        );
     }
 
     /**
@@ -154,6 +173,6 @@ class RedisSupervisorRepository implements SupervisorRepository
      */
     protected function connection()
     {
-        return $this->redis->connection('horizon-supervisors');
+        return $this->redis->connection('horizon');
     }
 }

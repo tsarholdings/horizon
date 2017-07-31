@@ -100,7 +100,7 @@ class SupervisorTest extends IntegrationTest
         });
 
         $this->wait(function () use ($id) {
-            $this->assertGreaterThan(0, Redis::connection('horizon-jobs')->ttl($id));
+            $this->assertGreaterThan(0, Redis::connection('horizon')->ttl($id));
         });
     }
 
@@ -410,7 +410,7 @@ class SupervisorTest extends IntegrationTest
     }
 
     /**
-     * @expectedException Exception
+     * @expectedException \Exception
      */
     public function test_supervisor_with_duplicate_name_cant_be_started()
     {

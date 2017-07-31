@@ -2,6 +2,7 @@
 
 namespace Laravel\Horizon\Repositories;
 
+use Cake\Chronos\Chronos;
 use Illuminate\Support\Arr;
 use Laravel\Horizon\MasterSupervisor;
 use Laravel\Horizon\Contracts\SupervisorRepository;
@@ -20,7 +21,7 @@ class RedisMasterSupervisorRepository implements MasterSupervisorRepository
     /**
      * Create a new repository instance.
      *
-     * @param \Illuminate\Contracts\Redis\Factory $redis
+     * @param  \Illuminate\Contracts\Redis\Factory  $redis
      * @return void
      */
     public function __construct(RedisFactory $redis)
@@ -35,9 +36,9 @@ class RedisMasterSupervisorRepository implements MasterSupervisorRepository
      */
     public function names()
     {
-        return collect($this->connection()->keys('master:*'))->map(function ($name) {
-            return substr($name, 7);
-        })->all();
+        return $this->connection()->zrevrangebyscore('masters', '+inf',
+            Chronos::now()->subSeconds(14)->getTimestamp()
+        );
     }
 
     /**
@@ -90,25 +91,29 @@ class RedisMasterSupervisorRepository implements MasterSupervisorRepository
     /**
      * Update the information about the given master supervisor.
      *
-     * @param \Laravel\Horizon\MasterSupervisor $master
+     * @param  \Laravel\Horizon\MasterSupervisor  $master
      * @return void
      */
     public function update(MasterSupervisor $master)
     {
         $supervisors = $master->supervisors->map->name->all();
 
-        $this->connection()->hmset(
-            'master:'.$master->name, [
-                'name' => $master->name,
-                'pid' => $master->pid(),
-                'status' => $master->working ? 'running' : 'paused',
-                'supervisors' => json_encode($supervisors),
-            ]
-        );
+        $this->connection()->pipeline(function ($pipe) use ($master, $supervisors) {
+            $pipe->hmset(
+                'master:'.$master->name, [
+                    'name' => $master->name,
+                    'pid' => $master->pid(),
+                    'status' => $master->working ? 'running' : 'paused',
+                    'supervisors' => json_encode($supervisors),
+                ]
+            );
 
-        $this->connection()->expire(
-            'master:'.$master->name, 15
-        );
+            $pipe->zadd('masters',
+                Chronos::now()->getTimestamp(), $master->name
+            );
+
+            $pipe->expire('master:'.$master->name, 15);
+        });
     }
 
     /**
@@ -128,6 +133,20 @@ class RedisMasterSupervisorRepository implements MasterSupervisorRepository
         );
 
         $this->connection()->del('master:'.$name);
+
+        $this->connection()->zrem('masters', $name);
+    }
+
+    /**
+     * Remove expired master supervisors from storage.
+     *
+     * @return void
+     */
+    public function flushExpired()
+    {
+        $this->connection()->zremrangebyscore('masters', '-inf',
+            Chronos::now()->subSeconds(14)->getTimestamp()
+        );
     }
 
     /**
@@ -137,6 +156,6 @@ class RedisMasterSupervisorRepository implements MasterSupervisorRepository
      */
     protected function connection()
     {
-        return $this->redis->connection('horizon-supervisors');
+        return $this->redis->connection('horizon');
     }
 }

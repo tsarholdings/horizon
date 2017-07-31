@@ -2,6 +2,7 @@
 
 namespace Laravel\Horizon\Notifications;
 
+use Illuminate\Notifications\Messages\MailMessage;
 use Laravel\Horizon\Horizon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
@@ -59,7 +60,26 @@ class LongWaitDetected extends Notification
         return array_filter([
             Horizon::$slackWebhookUrl ? 'slack' : null,
             Horizon::$smsNumber ? 'nexmo' : null,
+            Horizon::$email ? 'mail' : null,
         ]);
+    }
+
+    /**
+     * Get the mail representation of the notification.
+     *
+     * @param  mixed  $notifiable
+     * @return \Illuminate\Notifications\Messages\MailMessage
+     */
+    public function toMail($notifiable)
+    {
+        return (new MailMessage)
+            ->error()
+            ->subject(config('app.name').': Long Queue Wait Detected')
+            ->greeting('Oh no! Something needs your attention.')
+            ->line(sprintf(
+                 'The "%s" queue on the "%s" connection has a wait time of %s seconds.',
+                $this->queue, $this->connection, $this->seconds
+            ));
     }
 
     /**

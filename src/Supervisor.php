@@ -69,7 +69,7 @@ class Supervisor implements Pausable, Restartable, Terminable
     /**
      * Create a new supervisor instance.
      *
-     * @param \Laravel\Horizon\SupervisorOptions $options
+     * @param  \Laravel\Horizon\SupervisorOptions  $options
      * @return void
      */
     public function __construct(SupervisorOptions $options)
@@ -122,7 +122,7 @@ class Supervisor implements Pausable, Restartable, Terminable
     /**
      * Create a new process pool with the given options.
      *
-     * @param \Laravel\Horizon\SupervisorOptions $options
+     * @param  \Laravel\Horizon\SupervisorOptions  $options
      * @return \Laravel\Horizon\ProcessPool
      */
     protected function createProcessPool(SupervisorOptions $options)
@@ -140,9 +140,8 @@ class Supervisor implements Pausable, Restartable, Terminable
      */
     public function scale($processes)
     {
-        $this->options->maxProcesses = max(
-            $this->options->maxProcesses,
-            max($processes, count($this->processPools))
+        $this->options->maxProcesses = max($this->options->maxProcesses,
+            $processes, count($this->processPools)
         );
 
         $this->balance($this->processPools->mapWithKeys(function ($pool) use ($processes) {

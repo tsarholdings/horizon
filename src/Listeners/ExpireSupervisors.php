@@ -2,9 +2,12 @@
 
 namespace Laravel\Horizon\Listeners;
 
+use Cake\Chronos\Chronos;
 use Laravel\Horizon\Events\MasterSupervisorLooped;
+use Laravel\Horizon\Contracts\SupervisorRepository;
+use Laravel\Horizon\Contracts\MasterSupervisorRepository;
 
-class MonitorMasterSupervisorMemory
+class ExpireSupervisors
 {
     /**
      * Handle the event.
@@ -14,10 +17,8 @@ class MonitorMasterSupervisorMemory
      */
     public function handle(MasterSupervisorLooped $event)
     {
-        $master = $event->master;
+        resolve(MasterSupervisorRepository::class)->flushExpired();
 
-        if ($master->memoryUsage() > 64) {
-            $master->terminate(12);
-        }
+        resolve(SupervisorRepository::class)->flushExpired();
     }
 }

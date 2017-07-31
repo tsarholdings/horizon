@@ -21,7 +21,7 @@ class RedisMetricsRepository implements MetricsRepository
     /**
      * Create a new repository instance.
      *
-     * @param \Illuminate\Contracts\Redis\Factory $redis
+     * @param  \Illuminate\Contracts\Redis\Factory  $redis
      * @return void
      */
     public function __construct(RedisFactory $redis)
@@ -36,10 +36,10 @@ class RedisMetricsRepository implements MetricsRepository
      */
     public function measuredJobs()
     {
-        $classes = (array) $this->connection()->keys('job:*');
+        $classes = (array) $this->connection()->smembers('measured_jobs');
 
         return collect($classes)->map(function ($class) {
-            return substr($class, 4);
+            return substr($class, 12);
         })->all();
     }
 
@@ -50,10 +50,10 @@ class RedisMetricsRepository implements MetricsRepository
      */
     public function measuredQueues()
     {
-        $queues = (array) $this->connection()->keys('queue:*');
+        $queues = (array) $this->connection()->smembers('measured_queues');
 
         return collect($queues)->map(function ($class) {
-            return substr($class, 6);
+            return substr($class, 14);
         })->all();
     }
 
@@ -182,7 +182,9 @@ class RedisMetricsRepository implements MetricsRepository
      */
     public function incrementJob($job, $runtime)
     {
-        return $this->increment('job:'.$job, $runtime);
+        $this->connection()->eval(LuaScripts::updateMetrics(), 2,
+            'job:'.$job, 'measured_jobs', $runtime
+        );
     }
 
     /**
@@ -194,27 +196,9 @@ class RedisMetricsRepository implements MetricsRepository
      */
     public function incrementQueue($queue, $runtime)
     {
-        return $this->increment('queue:'.$queue, $runtime);
-    }
-
-    /**
-     * Increment the metrics information for a key.
-     *
-     * @param  string  $key
-     * @param  float  $runtime
-     * @return void
-     */
-    protected function increment($key, $runtime)
-    {
-        $this->connection()->pipeline(function ($pipe) use ($key, $runtime) {
-            $pipe->hsetnx($key, 'throughput', 0);
-
-            if (config('database.redis.client') == 'phpredis') {
-                $pipe->eval(LuaScripts::updateJobMetrics(), [$key, $runtime], 1);
-            } else {
-                $pipe->eval(LuaScripts::updateJobMetrics(), 1, $key, $runtime);
-            }
-        });
+        $this->connection()->eval(LuaScripts::updateMetrics(), 2,
+            'queue:'.$queue, 'measured_queues', $runtime
+        );
     }
 
     /**
@@ -396,6 +380,6 @@ class RedisMetricsRepository implements MetricsRepository
      */
     public function connection()
     {
-        return $this->redis->connection('horizon-metrics');
+        return $this->redis->connection('horizon');
     }
 }

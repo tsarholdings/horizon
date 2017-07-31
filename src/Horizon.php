@@ -28,6 +28,13 @@ class Horizon
     public static $smsNumber;
 
     /**
+     * The email address for notifications.
+     *
+     * @var string
+     */
+    public static $email;
+
+    /**
      * The database configuration methods.
      *
      * @var array
@@ -73,9 +80,22 @@ class Horizon
     {
         $config = config("database.redis.{$connection}");
 
-        foreach (static::$databases as $database) {
-            static::{"configure{$database}Database"}($config);
-        }
+        config(['database.redis.horizon' => array_merge($config, [
+            'options' => ['prefix' => 'horizon:']
+        ])]);
+    }
+
+    /**
+     * Specify the email address to which email notifications should be routed.
+     *
+     * @param  string  $email
+     * @return static
+     */
+    public static function routeMailNotificationsTo($email)
+    {
+        static::$email = $email;
+
+        return new static;
     }
 
     /**
@@ -102,96 +122,5 @@ class Horizon
         static::$smsNumber = $number;
 
         return new static;
-    }
-
-    /**
-     * Configure the database that holds a copy of the queue jobs.
-     *
-     * @param  array  $config
-     * @return void
-     */
-    protected static function configureJobsDatabase(array $config)
-    {
-        config(['database.redis.horizon-jobs' => array_merge($config, [
-            'database' => 9,
-        ])]);
-    }
-
-    /**
-     * Configure the database that stores meta information on supervisors.
-     *
-     * @param  array  $config
-     * @return void
-     */
-    protected static function configureSupervisorsDatabase(array $config)
-    {
-        config(['database.redis.horizon-supervisors' => array_merge($config, [
-            'database' => 10,
-        ])]);
-    }
-
-    /**
-     * Configure the database for the supervisor command queues.
-     *
-     * @param  array  $config
-     * @return void
-     */
-    protected static function configureCommandQueueDatabase(array $config)
-    {
-        config(['database.redis.horizon-command-queue' => array_merge($config, [
-            'database' => 11,
-        ])]);
-    }
-
-    /**
-     * Configure the database that stores tag to job mappings.
-     *
-     * @param  array  $config
-     * @return void
-     */
-    protected static function configureTagsDatabase(array $config)
-    {
-        config(['database.redis.horizon-tags' => array_merge($config, [
-            'database' => 12,
-        ])]);
-    }
-
-    /**
-     * Configure the database that stores tag to job mappings.
-     *
-     * @param  array  $config
-     * @return void
-     */
-    protected static function configureMetricsDatabase(array $config)
-    {
-        config(['database.redis.horizon-metrics' => array_merge($config, [
-            'database' => 13,
-        ])]);
-    }
-
-    /**
-     * Configure the database that stores locks.
-     *
-     * @param  array  $config
-     * @return void
-     */
-    protected static function configureLocksDatabase(array $config)
-    {
-        config(['database.redis.horizon-locks' => array_merge($config, [
-            'database' => 14,
-        ])]);
-    }
-
-    /**
-     * Configure the database that stores locks.
-     *
-     * @param  array  $config
-     * @return void
-     */
-    protected static function configureProcessesDatabase(array $config)
-    {
-        config(['database.redis.horizon-processes' => array_merge($config, [
-            'database' => 15,
-        ])]);
     }
 }
